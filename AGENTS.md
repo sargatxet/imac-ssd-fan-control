@@ -25,11 +25,12 @@ Si el cron está activo (`*/2 * * * * control_fan.sh`), **cualquier cambio manua
 
 | Dato | Valor |
 |---|---|
-| Host | `imac` |
+| Host | `imac` (el equipo de referencia) |
 | SO | Linux Mint 22.3 (Zena), kernel 6.8.0-147 |
 | Driver | `applesmc`, dispositivo `applesmc.768` |
 | Ruta sysfs | `/sys/devices/platform/applesmc.768/` |
-| Usuario | `sargatxet` (sin sudo sin contraseña) |
+| Usuario | el usuario de la instalación (`$USER`); necesita poder usar `sudo` |
+| Directorio | `$INSTALL_DIR` — el que elija el usuario (p. ej. `$HOME/fan_control`) |
 | Proyecto | `$INSTALL_DIR/` — sin rutas absolutas en el código (ver `SCRIPT_DIR`) |
 | Log de control | `$INSTALL_DIR/control_fan.log` (máx. 100 líneas) |
 | Cron | **root**, `*/2 * * * * /ruta/absoluta/control_fan.sh` |
