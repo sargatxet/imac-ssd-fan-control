@@ -1,0 +1,8 @@
+# Runtime state, not source code
+control_fan.log
+control_fan.log.tmp
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
