@@ -1,5 +1,7 @@
 # fan_control
 
+**[Español](README_ES.md) | [English](README.md)**
+
 Control de la velocidad del ventilador **fan2 (HDD)** de un iMac, ajustándola de forma proporcional a la temperatura de CPU y GPU.
 
 - **Hardware**: Apple iMac (Linux Mint 22.3 "Zena", kernel 6.8.0, hostname `imac`)
@@ -52,11 +54,11 @@ $INSTALL_DIR/
 ├── control_fan.sh  # Control por temperatura + modo manual opcional (cron)
 ├── control_fan.log # Registro de cambios de RPM (máx. 100 líneas, generado al ejecutar)
 ├── LICENSE         # MIT © 2026 Toni Ramiro
-├── README.md       # Este documento
-└── AGENTS.md       # Notas para agentes de IA / mantenimiento
+├── README.md       # Documentación en inglés
+├── README_ES.md    # Este documento (español)
+├── AGENTS.md       # Notas para agentes de IA (inglés)
+└── AGENTS_ES.md    # Notas para agentes de IA (español)
 ```
-
-Todos los scripts deben tener permiso de ejecución (`chmod +x *.sh`).
 
 Todos los scripts deben tener permiso de ejecución (`chmod +x *.sh`).
 
@@ -392,7 +394,6 @@ Ejemplos: 40 °C → 2140 · 50 °C → 3180 · 60 °C → 4220 · 70 °C → 52
 El log está **acotado a 100 líneas**: en cada ejecución, si el fichero supera ese tamaño se eliminan las líneas más antiguas (`sed -i "1,Nd"`, que conserva inodo, propietario y permisos). Crece por abajo y se recorta por arriba.
 
 ```
-
 2026-10-29 07:44:01 - 3471 -> 3492 (CPU: 44.5°C, GPU: 53.0°C, MAX: 53.0°C)
 ```
 
@@ -528,4 +529,5 @@ sudo $INSTALL_DIR/control_fan.sh 1100   # mínimo
   - `README.md`: añadida la sección **Motivación** (sustitución del HDD por SSD y pérdida del sensor que regulaba `fan2`).
   - `README.md`: añadida la sección **Sistemas operativos y hardware compatibles** (Linux + Apple Intel + `applesmc`; no válido para macOS, Windows, Apple Silicon ni PC).
   - `control_fan.sh` deja de tener rutas absolutas: resuelve `cpu.sh`, `gpu.sh` y `control_fan.log` desde su propio directorio (`SCRIPT_DIR`), por lo que se puede instalar en cualquier carpeta. `LOG_FILE` se puede sobrescribir por variable de entorno.
-  - `README.md`: añadida la sección **Instalación** (requisitos, dependencias, pasos 0–7, Conky, desinstalación) y todas las rutas pasan a `$INSTALL_DIR`.
+  - `README_ES.md` / `README.md`: añadida la sección **Instalación** (requisitos, dependencias, pasos 0–7, Conky, desinstalación) y todas las rutas pasan a `$INSTALL_DIR`.
+  - Documentación separada por idioma: `README_ES.md` / `AGENTS_ES.md` (español) y `README.md` / `AGENTS.md` (inglés).

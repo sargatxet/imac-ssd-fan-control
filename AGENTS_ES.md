@@ -1,4 +1,6 @@
-# AGENTS.md — Notas para agentes de IA
+# AGENTS_ES.md — Notas para agentes de IA
+
+**[Español](AGENTS_ES.md) | [English](AGENTS.md)**
 
 Contexto operativo del proyecto `fan_control`. Léelo antes de tocar nada.
 
@@ -152,35 +154,38 @@ Priorizadas, ninguna aplicada todavía:
 - ~~Ruta del log partida en `/root/fan_control/`~~ → unificada en `$INSTALL_DIR/`.
 - ~~`set_fan.sh` truncaba el log~~ → **`set_fan.sh` eliminado**; su función la cubre `control_fan.sh <RPM>` (append + recorte de 100 líneas).
 
-Si implementas alguna, actualiza `README.md` (sección "Limitaciones conocidas" e "Historial de cambios") en el mismo cambio.
+Si implementas alguna, actualiza `README_ES.md` y `README.md` (secciones "Limitaciones conocidas" / "Known limitations" e historial) en el mismo cambio.
 
 ---
 
 ## Comandos de verificación
 
+`$INSTALL_DIR` = directorio del proyecto (no hay rutas absolutas en el código).
+
 ```bash
 # Sintaxis de todos los scripts
-for f in $INSTALL_DIR/*.sh; do bash -n "$f" || echo "FALLO: $f"; done
+for f in "$INSTALL_DIR"/*.sh; do bash -n "$f" || echo "FALLO: $f"; done
 
 # Contrato de salida (debe imprimir un número con un decimal)
-$INSTALL_DIR/cpu.sh; echo
-$INSTALL_DIR/gpu.sh; echo
+"$INSTALL_DIR/cpu.sh"; echo
+"$INSTALL_DIR/gpu.sh"; echo
 
-# Simulación del cálculo sin tocar el hardware
-bash -x $INSTALL_DIR/control_fan.sh 2>&1 | grep -E 'MAX_TEMP|TARGET_RPM'
+# Traza del cálculo (usa el hardware real)
+sudo bash -x "$INSTALL_DIR/control_fan.sh" 2>&1 | grep -E 'MAX_TEMP|TARGET_RPM'
 
-# Banco de pruebas seguro: sustituye sensores, sysfs y log por stubs en /tmp
-T=/tmp/cftest; mkdir -p $T/sys; echo 1100 > $T/sys/fan2_min; \
-  echo 6300 > $T/sys/fan2_max; echo 3500 > $T/sys/fan2_output
-sed -e 's#$INSTALL_DIR/cpu.sh#echo "$STUB_CPU"#' \
-    -e 's#$INSTALL_DIR/gpu.sh#echo "$STUB_GPU"#' \
-    -e 's#/sys/devices/platform/applesmc.768/#$T/sys/#' \
-    -e 's#$INSTALL_DIR/control_fan.log#$T/log#' \
-    $INSTALL_DIR/control_fan.sh > $T/run.sh
-T=$T STUB_CPU=53.5 STUB_GPU=40.0 bash $T/run.sh; cat $T/sys/fan2_output   # esperado 3544
+# Banco de pruebas: copia el proyecto a /tmp y sustituye cpu.sh/gpu.sh por stubs.
+# El script resuelve SCRIPT_DIR desde su propia ruta, así que usa los stubs y su
+# propio control_fan.log. OJO: sysfs sigue siendo el real (el ventilador se mueve,
+# acotado a 1100..6300).
+T=$(mktemp -d)
+cp "$INSTALL_DIR"/{cpu.sh,gpu.sh,control_fan.sh} "$T"/
+printf '#!/bin/bash\necho 53.5\n' > "$T/cpu.sh"
+printf '#!/bin/bash\necho 40.0\n' > "$T/gpu.sh"
+sudo "$T/control_fan.sh"        # esperado: 1100 + (53.5-30)*104 = 3544
+rm -rf "$T"
 
 # Prueba real (sobrescribe el valor; el cron lo corregirá)
-sudo $INSTALL_DIR/control_fan.sh
+sudo "$INSTALL_DIR/control_fan.sh"
 
 # Comprobar que el cron se ejecuta
 sudo crontab -l | tail -3
@@ -189,9 +194,28 @@ grep CRON /var/log/syslog | grep control_fan | tail -5
 
 ---
 
+## Portabilidad de rutas (`SCRIPT_DIR`)
+
+`control_fan.sh` **no contiene rutas absolutas**: al arrancar hace
+
+```bash
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+LOG_FILE="${LOG_FILE:-$SCRIPT_DIR/control_fan.log}"
+```
+
+y llama a `"$SCRIPT_DIR/cpu.sh"` y `"$SCRIPT_DIR/gpu.sh"`. Consecuencias:
+
+- El proyecto se puede mover/clonar en **cualquier** directorio sin editar nada.
+- Funciona invocado por ruta absoluta, relativa o vía symlink desde otro `cwd`.
+- `LOG_FILE` se puede redirigir con una variable de entorno (`LOG_FILE=/var/log/x.log sudo -E ...`).
+- **No** volver a introducir `/home/algo/...` en el código; si hace falta una ruta, derivarla de `$SCRIPT_DIR`.
+
+---
+
 ## Convenciones
 
-- Idioma de la documentación: **español**. Comentarios de código: inglés (heredado de los scripts originales).
-- Rutas **absolutas** en los scripts invocados por cron (el `PATH` y el `HOME` de cron no son los del usuario).
+- Idioma de la documentación: **español** en `*_ES.md`, **inglés** en `README.md`/`AGENTS.md`. Comentarios de código: inglés.
+- **Nunca hardcodear** el directorio del proyecto en los scripts; usar `$SCRIPT_DIR`.
+- En la **línea de cron** sí va la ruta **absoluta** real (`cron` no expande `~` ni variables, y su `PATH`/`HOME` no son los del usuario).
 - Citar rutas de fichero como `` `ruta/absoluta` `` en las respuestas.
 - Antes de proponer un cambio destructivo (borrar scripts, vaciar `control_fan.log`, desactivar el cron), pedir aprobación.
