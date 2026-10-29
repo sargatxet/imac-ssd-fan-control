@@ -9,7 +9,12 @@
 # Requires root (writes to fan2_manual / fan2_output).
 # Scheduled by root's crontab every 2 minutes without arguments.
 
-LOG_FILE=/home/sargatxet/fan_control/control_fan.log
+# Directory where this script lives: cpu.sh and gpu.sh are resolved relative to
+# it, so the project can be installed anywhere without editing any path.
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+# Override with LOG_FILE=/path/to/log if you want the log somewhere else.
+LOG_FILE="${LOG_FILE:-$SCRIPT_DIR/control_fan.log}"
 LOG_MAX_LINES=100
 
 SMC=/sys/devices/platform/applesmc.768
@@ -86,8 +91,8 @@ else
     MODE="auto"
 
     # Load temperature values
-    CPU_TEMP=$(/home/sargatxet/fan_control/cpu.sh)
-    GPU_TEMP=$(/home/sargatxet/fan_control/gpu.sh)
+    CPU_TEMP=$("$SCRIPT_DIR/cpu.sh")
+    GPU_TEMP=$("$SCRIPT_DIR/gpu.sh")
 
     CPU_TEMP_NUM=$(parse_temp "$CPU_TEMP")
     GPU_TEMP_NUM=$(parse_temp "$GPU_TEMP")

@@ -30,9 +30,9 @@ Si el cron está activo (`*/2 * * * * control_fan.sh`), **cualquier cambio manua
 | Driver | `applesmc`, dispositivo `applesmc.768` |
 | Ruta sysfs | `/sys/devices/platform/applesmc.768/` |
 | Usuario | `sargatxet` (sin sudo sin contraseña) |
-| Proyecto | `/home/sargatxet/fan_control/` |
-| Log de control | `/home/sargatxet/fan_control/control_fan.log` |
-| Cron | **root**, `*/2 * * * * /home/sargatxet/fan_control/control_fan.sh` |
+| Proyecto | `$INSTALL_DIR/` — sin rutas absolutas en el código (ver `SCRIPT_DIR`) |
+| Log de control | `$INSTALL_DIR/control_fan.log` (máx. 100 líneas) |
+| Cron | **root**, `*/2 * * * * /ruta/absoluta/control_fan.sh` |
 
 Requisitos externos: `lm-sensors` (`/usr/bin/sensors`), `awk`, `bc`, `grep`, `sed`, `bash` ≥ 4. Conky para la monitorización.
 
@@ -148,7 +148,7 @@ Priorizadas, ninguna aplicada todavía:
 - ~~Parsing frágil de temperaturas~~ → `parse_temp()` acepta enteros, coma decimal, `+` y unidades.
 - ~~Fallback inseguro ante fallo de sensores~~ → ahora 100 °C → `fan2_max`.
 - ~~Rotación de `control_fan.log`~~ → acotado a `LOG_MAX_LINES=100` con `sed -i` (conserva owner/permisos).
-- ~~Ruta del log partida en `/root/fan_control/`~~ → unificada en `/home/sargatxet/fan_control/`.
+- ~~Ruta del log partida en `/root/fan_control/`~~ → unificada en `$INSTALL_DIR/`.
 - ~~`set_fan.sh` truncaba el log~~ → **`set_fan.sh` eliminado**; su función la cubre `control_fan.sh <RPM>` (append + recorte de 100 líneas).
 
 Si implementas alguna, actualiza `README.md` (sección "Limitaciones conocidas" e "Historial de cambios") en el mismo cambio.
@@ -159,27 +159,27 @@ Si implementas alguna, actualiza `README.md` (sección "Limitaciones conocidas" 
 
 ```bash
 # Sintaxis de todos los scripts
-for f in /home/sargatxet/fan_control/*.sh; do bash -n "$f" || echo "FALLO: $f"; done
+for f in $INSTALL_DIR/*.sh; do bash -n "$f" || echo "FALLO: $f"; done
 
 # Contrato de salida (debe imprimir un número con un decimal)
-/home/sargatxet/fan_control/cpu.sh; echo
-/home/sargatxet/fan_control/gpu.sh; echo
+$INSTALL_DIR/cpu.sh; echo
+$INSTALL_DIR/gpu.sh; echo
 
 # Simulación del cálculo sin tocar el hardware
-bash -x /home/sargatxet/fan_control/control_fan.sh 2>&1 | grep -E 'MAX_TEMP|TARGET_RPM'
+bash -x $INSTALL_DIR/control_fan.sh 2>&1 | grep -E 'MAX_TEMP|TARGET_RPM'
 
 # Banco de pruebas seguro: sustituye sensores, sysfs y log por stubs en /tmp
 T=/tmp/cftest; mkdir -p $T/sys; echo 1100 > $T/sys/fan2_min; \
   echo 6300 > $T/sys/fan2_max; echo 3500 > $T/sys/fan2_output
-sed -e 's#/home/sargatxet/fan_control/cpu.sh#echo "$STUB_CPU"#' \
-    -e 's#/home/sargatxet/fan_control/gpu.sh#echo "$STUB_GPU"#' \
+sed -e 's#$INSTALL_DIR/cpu.sh#echo "$STUB_CPU"#' \
+    -e 's#$INSTALL_DIR/gpu.sh#echo "$STUB_GPU"#' \
     -e 's#/sys/devices/platform/applesmc.768/#$T/sys/#' \
-    -e 's#/home/sargatxet/fan_control/control_fan.log#$T/log#' \
-    /home/sargatxet/fan_control/control_fan.sh > $T/run.sh
+    -e 's#$INSTALL_DIR/control_fan.log#$T/log#' \
+    $INSTALL_DIR/control_fan.sh > $T/run.sh
 T=$T STUB_CPU=53.5 STUB_GPU=40.0 bash $T/run.sh; cat $T/sys/fan2_output   # esperado 3544
 
 # Prueba real (sobrescribe el valor; el cron lo corregirá)
-sudo /home/sargatxet/fan_control/control_fan.sh
+sudo $INSTALL_DIR/control_fan.sh
 
 # Comprobar que el cron se ejecuta
 sudo crontab -l | tail -3

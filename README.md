@@ -8,6 +8,8 @@ Control de la velocidad del ventilador **fan2 (HDD)** de un iMac, ajustándola d
 - **Ventilador gestionado**: `fan2` (etiqueta `HDD`)
 - **Herramienta de lectura**: `lm-sensors` (`sensors`)
 
+> **Convención de rutas**: en todo el documento, `$INSTALL_DIR` es **la carpeta donde instales el proyecto** (por ejemplo `$HOME/fan_control`). Los scripts **no contienen rutas absolutas**: `control_fan.sh` localiza `cpu.sh`, `gpu.sh` y el log a partir de su propia ubicación, así que puedes instalarlo en cualquier directorio sin editar nada. Ver [Instalación](#instalación).
+
 ---
 
 ## Motivación: por qué existe este proyecto
@@ -36,7 +38,7 @@ El RPM se calcula de forma proporcional a la **mayor** de esas dos temperaturas,
 | RPM máximo (hardware) | 6300 |
 | Modo manual | `fan2_manual = 1` |
 | Programación | `crontab` de **root**, cada **2 minutos** |
-| Comando programado | `*/2 * * * * /home/sargatxet/fan_control/control_fan.sh` |
+| Comando programado | `*/2 * * * * /home/TU_USUARIO/fan_control/control_fan.sh` (ruta absoluta real) |
 | Monitorización | Conky (`~/.conkyrc`) |
 
 ---
@@ -44,15 +46,17 @@ El RPM se calcula de forma proporcional a la **mayor** de esas dos temperaturas,
 ## Estructura
 
 ```
-/home/sargatxet/fan_control/
+$INSTALL_DIR/
 ├── cpu.sh          # Temperatura media de los cores de CPU -> "41.5"
 ├── gpu.sh          # Temperatura del sensor TG0H (GPU)   -> "52.8"
 ├── control_fan.sh  # Control por temperatura + modo manual opcional (cron)
-├── control_fan.log # Registro de cambios de RPM (máx. 100 líneas)
+├── control_fan.log # Registro de cambios de RPM (máx. 100 líneas, generado al ejecutar)
 ├── LICENSE         # MIT © 2026 Toni Ramiro
 ├── README.md       # Este documento
 └── AGENTS.md       # Notas para agentes de IA / mantenimiento
 ```
+
+Todos los scripts deben tener permiso de ejecución (`chmod +x *.sh`).
 
 Todos los scripts deben tener permiso de ejecución (`chmod +x *.sh`).
 
@@ -129,7 +133,7 @@ Ficheros relevantes en `/sys/devices/platform/applesmc.768/`:
 | `conky` | Panel opcional | `conky-all` |
 | `sudo` | Escritura en `sysfs` | `sudo` |
 
-Instalación mínima en Debian/Ubuntu/Mint:
+Instalación mínima en Debian/Ubuntu/Mint (detalle en [Instalación](#instalación)):
 
 ```bash
 sudo apt install lm-sensors bc
@@ -152,12 +156,163 @@ Los nombres de chip de `sensors` (`coretemp-isa-0000`, `applesmc-isa-0300`) y lo
 
 ---
 
+## Instalación
+
+Guía para instalar el proyecto en **tu** equipo. En los ejemplos se usa `$HOME/fan_control` como destino; cámbialo por la ruta que prefieras (`/opt/fan_control`, `~/scripts/fan`, …).
+
+### Paso 0 — Requisitos previos
+
+Necesitas **Linux sobre un Mac Intel** con el driver `applesmc` (ver [compatibilidad](#sistemas-operativos-y-hardware-compatibles)). Comprueba antes de nada que el hardware expone los ventiladores:
+
+```bash
+ls -d /sys/devices/platform/applesmc.*      # debe existir
+ls /sys/devices/platform/applesmc.*/fan*_label   # debe listar etiquetas
+```
+
+Si no aparece nada, el driver no está cargado o el hardware no es compatible:
+
+```bash
+sudo modprobe applesmc
+lsmod | grep -E 'applesmc|coretemp'
+```
+
+### Paso 1 — Instalar los programas necesarios
+
+| Programa | Paquete (Debian/Ubuntu/Mint) | ¿Para qué? |
+|---|---|---|
+| `sensors` | `lm-sensors` | Leer temperaturas y RPM |
+| `bc` | `bc` | Calcular el RPM objetivo |
+| `awk`, `sed`, `grep`, `tr`, `wc`, `date` | `mawk`, `sed`, `grep`, `coreutils` | Parseo y utilidades |
+| `bash` ≥ 4 | `bash` | Intérprete |
+| `cron` | `cron` | Ejecución periódica |
+| `git` | `git` | Solo para clonar el repositorio |
+| `sudo` | `sudo` | Escribir en `sysfs` |
+
+```bash
+sudo apt update
+sudo apt install -y lm-sensors bc git cron
+```
+
+En la mayoría de instalaciones `bash`, `awk`, `sed`, `grep` y `coreutils` ya están presentes. Detecta y carga los módulos de sensores:
+
+```bash
+sudo sensors-detect --auto
+sensors            # debe mostrar coretemp-isa-0000 y applesmc-isa-0300
+```
+
+Si `sensors` no muestra `applesmc-isa-0300`, revisa el [Paso 0](#paso-0--requisitos-previos).
+
+**Opcional — panel Conky**:
+
+```bash
+sudo apt install -y conky-all
+```
+
+### Paso 2 — Descargar el proyecto
+
+Con git:
+
+```bash
+INSTALL_DIR="$HOME/fan_control"
+git clone https://github.com/sargatxet/imac-ssd-fan-control.git "$INSTALL_DIR"
+```
+
+O copiando los ficheros (`cpu.sh`, `gpu.sh`, `control_fan.sh`) a `$INSTALL_DIR` con `scp`, un pendrive, etc.
+
+### Paso 3 — Permisos de ejecución
+
+```bash
+cd "$INSTALL_DIR"
+chmod +x cpu.sh gpu.sh control_fan.sh
+```
+
+### Paso 4 — Verificar sin tocar el ventilador
+
+```bash
+"$INSTALL_DIR/cpu.sh"; echo      # -> 41.5   (un número con un decimal)
+"$INSTALL_DIR/gpu.sh"; echo      # -> 52.8
+cat /sys/devices/platform/applesmc.768/fan2_min   # -> 1100
+cat /sys/devices/platform/applesmc.768/fan2_max   # -> 6300
+```
+
+Si los dos primeros no devuelven un número, revisa los nombres de chip de `sensors` en `cpu.sh`/`gpu.sh` (varían según el modelo).
+
+### Paso 5 — Primera ejecución
+
+```bash
+sudo "$INSTALL_DIR/control_fan.sh"
+```
+
+Salida esperada: `Setting fan2 speed: 3600 -> 3180 RPM (auto)` o `Fan speed already at target: N RPM (auto)`.
+
+Si falla con `Permiso denegado`, es que se ejecutó sin `sudo`. El script **crea el log junto a sí mismo** (`$INSTALL_DIR/control_fan.log`); si no aparece, revisa los permisos de escritura del directorio. Al crearlo el cron (que corre como root) el fichero quedará como `root:root` con modo `644`: se puede leer sin problema y el recorte de 100 líneas sigue funcionando porque también lo hace root.
+
+> A partir de aquí el ventilador está en **modo manual**. Para devolver el control al firmware: `echo 0 | sudo tee /sys/devices/platform/applesmc.768/fan2_manual`.
+
+### Paso 6 — Automatizar con cron
+
+```bash
+sudo crontab -e
+```
+
+Añade **una** línea, con la **ruta absoluta real** (cron no expande `~` ni `$VARIABLES`):
+
+```cron
+*/2 * * * * /home/TU_USUARIO/fan_control/control_fan.sh
+```
+
+Comprueba la ruta que debes pegar con:
+
+```bash
+cd "$INSTALL_DIR" && pwd -P
+```
+
+Verifica que quedó registrada:
+
+```bash
+sudo crontab -l | grep control_fan
+```
+
+### Paso 7 — Diagnóstico tras instalar
+
+```bash
+sensors applesmc-isa-0300 | head -4            # RPM de ODD/HDD/CPU
+cat /sys/devices/platform/applesmc.768/fan2_manual   # 1 = control manual activo
+cat /sys/devices/platform/applesmc.768/fan2_output   # RPM objetivo
+cat /sys/devices/platform/applesmc.768/fan2_input    # RPM reales
+tail -5 "$INSTALL_DIR/control_fan.log"         # historial de cambios
+```
+
+A los 2–4 minutos de activar el cron, `control_fan.log` debe tener líneas nuevas.
+
+### Opcional — Panel en Conky
+
+Copia el bloque `${execi …}` de la sección [Monitorización con Conky](#monitorización-con-conky) en `~/.conkyrc` y reinicia Conky:
+
+```bash
+killall conky; nohup conky >/dev/null 2>&1 &
+```
+
+### Desinstalar
+
+```bash
+# 1. Quitar el cron (sudo crontab -e y borrar la línea), luego:
+# 2. Devolver el control del ventilador al firmware
+ echo 0 | sudo tee /sys/devices/platform/applesmc.768/fan2_manual
+# 3. Borrar el proyecto
+rm -rf "$INSTALL_DIR"
+```
+
+**El paso 2 es importante**: mientras `fan2_manual` valga `1`, el SMC no regula el ventilador por su cuenta.
+
+---
+
 ## Uso
 
 ### Control automático (recomendado)
 
 ```bash
-sudo /home/sargatxet/fan_control/control_fan.sh
+sudo $INSTALL_DIR/control_fan.sh
 ```
 
 Requiere `root` porque escribe en `fan2_manual` y `fan2_output`.
@@ -166,9 +321,9 @@ Cron ya lo ejecuta como root cada 2 minutos, por lo que **no** hay que añadir `
 ### Control manual a RPM fijo
 
 ```bash
-sudo /home/sargatxet/fan_control/control_fan.sh 4000    # fuerza 4000 RPM (se recorta a 1100..6300)
-sudo /home/sargatxet/fan_control/control_fan.sh         # sin argumento -> modo automático
-sudo /home/sargatxet/fan_control/control_fan.sh -h      # ayuda
+sudo $INSTALL_DIR/control_fan.sh 4000    # fuerza 4000 RPM (se recorta a 1100..6300)
+sudo $INSTALL_DIR/control_fan.sh         # sin argumento -> modo automático
+sudo $INSTALL_DIR/control_fan.sh -h      # ayuda
 ```
 
 En modo manual **no se leen los sensores**. Si el valor pedido cae fuera de `fan2_min`..`fan2_max` se avisa por `stderr` y se recorta al límite correspondiente. Un argumento no numérico devuelve código de salida `2` sin tocar el ventilador. El log registra `(manual)` en lugar de las temperaturas.
@@ -187,8 +342,8 @@ Nota: el cron de 2 minutos volverá a activar el modo manual en la siguiente pas
 ### Lectura de temperaturas
 
 ```bash
-/home/sargatxet/fan_control/cpu.sh   # -> 41.5   (media de todos los cores, 1 decimal)
-/home/sargatxet/fan_control/gpu.sh   # -> 52.8   (sensor TG0H, 1 decimal)
+$INSTALL_DIR/cpu.sh   # -> 41.5   (media de todos los cores, 1 decimal)
+$INSTALL_DIR/gpu.sh   # -> 52.8   (sensor TG0H, 1 decimal)
 ```
 
 Ambos scripts devuelven un número con **un decimal, sin unidades y sin signo**, listo para ser consumido por `awk`/`bc`. En caso de fallo devuelven `100`.
@@ -253,7 +408,7 @@ Las entradas en modo manual no llevan temperaturas:
 Parámetros en `control_fan.sh`:
 
 ```bash
-LOG_FILE=/home/sargatxet/fan_control/control_fan.log
+LOG_FILE=$INSTALL_DIR/control_fan.log
 LOG_MAX_LINES=100
 ```
 
@@ -266,8 +421,10 @@ El recorte se aplica **siempre**, incluso si no ha habido cambio de RPM en esa e
 `sudo crontab -e`:
 
 ```cron
-*/2 * * * * /home/sargatxet/fan_control/control_fan.sh
+*/2 * * * * /home/TU_USUARIO/fan_control/control_fan.sh
 ```
+
+**Cron no expande variables ni `~`**, así que aquí hay que poner la **ruta absoluta real**, no `$INSTALL_DIR`. Compruébala con `echo "$INSTALL_DIR/control_fan.sh"` antes de pegarla. Se usa el crontab de **root** porque el script escribe en `sysfs`.
 
 Razonamiento del intervalo:
 
@@ -327,8 +484,8 @@ grep CRON /var/log/syslog | tail -20
 ### Prueba manual de límites
 
 ```bash
-sudo /home/sargatxet/fan_control/control_fan.sh 6300   # máximo
-sudo /home/sargatxet/fan_control/control_fan.sh 1100   # mínimo
+sudo $INSTALL_DIR/control_fan.sh 6300   # máximo
+sudo $INSTALL_DIR/control_fan.sh 1100   # mínimo
 # (el cron restaurará un valor proporcional a la temperatura en <= 2 min)
 ```
 
@@ -365,8 +522,10 @@ sudo /home/sargatxet/fan_control/control_fan.sh 1100   # mínimo
   - Programado en cron de root cada 2 minutos.
   - Conky: añadida línea de RPM de `fan2` y unificado el formato de GPU con CPU.
   - `control_fan.sh`: parsing de temperaturas robusto (`parse_temp`, acepta enteros, coma decimal, signo `+` y sufijo de unidad); el fallback por fallo de sensores pasa de 39.5/47.8 °C fijos a **100 °C → `fan2_max`** (fallo seguro).
-  - `done.log` renombrado a **`control_fan.log`**; `set_fan.sh` pasa a escribir en la misma ruta (`/home/sargatxet/fan_control/control_fan.log`) en lugar de `/root/fan_control/`.
+  - `done.log` renombrado a **`control_fan.log`**; `set_fan.sh` pasa a escribir en la misma ruta (`$INSTALL_DIR/control_fan.log`) en lugar de `/root/fan_control/`.
   - `control_fan.log` acotado a **100 líneas**: al añadir una nueva se descarta la más antigua.
   - **`set_fan.sh` eliminado**; su función la asume `control_fan.sh <RPM>` (parámetro opcional, con validación y recorte a los límites del hardware).
   - `README.md`: añadida la sección **Motivación** (sustitución del HDD por SSD y pérdida del sensor que regulaba `fan2`).
   - `README.md`: añadida la sección **Sistemas operativos y hardware compatibles** (Linux + Apple Intel + `applesmc`; no válido para macOS, Windows, Apple Silicon ni PC).
+  - `control_fan.sh` deja de tener rutas absolutas: resuelve `cpu.sh`, `gpu.sh` y `control_fan.log` desde su propio directorio (`SCRIPT_DIR`), por lo que se puede instalar en cualquier carpeta. `LOG_FILE` se puede sobrescribir por variable de entorno.
+  - `README.md`: añadida la sección **Instalación** (requisitos, dependencias, pasos 0–7, Conky, desinstalación) y todas las rutas pasan a `$INSTALL_DIR`.
